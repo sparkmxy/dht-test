@@ -15,7 +15,7 @@ func naiveTest() {
 	datalocal = make(map[string]string)
 	nodeGroup = new([maxNode]dhtNode)
 	nodeAddr = new([maxNode]string)
-
+	maxNodeSize = 5
 	joinpos := 1
 	for i := 0; i < maxNodeSize; i++ {
 		curPort := config.Port + i
@@ -23,7 +23,6 @@ func naiveTest() {
 		nodeAddr[i] = localIP + ":" + strconv.Itoa(curPort)
 		wg.Add(1)
 		go nodeGroup[i].Run()
-		
 	}
 	time.Sleep(time.Millisecond * 200)
 
@@ -125,8 +124,6 @@ func standardTest() {
 		info[0].finish()
 
 		time.Sleep(time.Second * 10)
-		//nodeGroup[rand.Intn(int(joinpos-leavepos))+leavepos].DumpAll()
-
 		cnt = 0
 		failcnt = 0
 		for j := 1; j <= roundDataSize; j++ {
@@ -238,14 +235,8 @@ func standardTest() {
 		info[6].initInfo("remove(2)", failcnt, cnt)
 		info[6].finish()
 	}
-}
 
-func (e *error) finish() {
-	totalCnt += e.all
-	totalFail += e.cnt
-	e.printlnError()
-}
-
-func standardAdditionTest(){
-
+	for i := 0; i < maxNodeSize; i++ {
+		nodeGroup[i].Quit()
+	}
 }

@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxNode int = 200
+	maxNode int = 301
 	maxData int = 2000
 	maxFail     = 0.01
 	// config.Port   int   = 1111
@@ -38,9 +38,10 @@ var (
 )
 
 var (
-	letters   = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	totalFail int
-	totalCnt  int
+	letters    = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	totalFail  int
+	totalCnt   int
+	finalScore float64
 
 	// config    map[string]interface{}
 	config      configure
@@ -132,4 +133,10 @@ func (e *error) printlnError() {
 	} else {
 		green.Printf("%s Passed\n", e.e)
 	}
+}
+
+func (e *error) finish() {
+	totalCnt += e.all
+	totalFail += e.cnt
+	e.printlnError()
 }

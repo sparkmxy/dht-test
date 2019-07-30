@@ -85,7 +85,7 @@ func ignoreError(){
 	_ = recover()
 }
 /*Periodical routines*/
-const intervalTime time.Duration = 200*time.Microsecond
+const intervalTime time.Duration = 200*time.Millisecond
 
 func (this *Console)stabilizeRoutine(){
 	defer ignoreError()

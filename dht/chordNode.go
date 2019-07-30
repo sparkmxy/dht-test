@@ -59,7 +59,7 @@ func (this *ChordNode) create(){
 
 func (this *ChordNode)stabilize(){
 //	defer reportError("stabilize")
-	suc := this.firstSuccessorWithCheck()
+	suc := this.firstValidSuccessor()
 	if suc == "" {
 		fmt.Println(this.address,": stabilize: Successor does not exist.")
 		return
@@ -180,7 +180,7 @@ func (this *ChordNode)closestPrecedingNode(hashAddr *big.Int) string{
 			i--;
 			continue;
 		}
-		if hashBetween(hashString(this.address),hashString(this.finger[i]),hashAddr,false){ // need to check ?
+		if hashBetween(hashString(this.address),hashString(this.finger[i]),hashAddr,false) && checkValidRPC(this.finger[i]){
 			return this.finger[i]
 		}else {
 			for j := i;i > 1 && this.finger[i] == this.finger[j];{
@@ -194,12 +194,6 @@ func (this *ChordNode)closestPrecedingNode(hashAddr *big.Int) string{
 func (this *ChordNode) firstValidSuccessor() string{
 	this.sucLock.RLock()
 	defer this.sucLock.RUnlock()
-	return this.successor[0]
-}
-
-func (this *ChordNode) firstSuccessorWithCheck() string{
-	this.sucLock.RLock()
-	defer this.sucLock.RUnlock()
 	for _,suc := range this.successor{
 		//fmt.Println("check: ",suc)
 		if checkValidRPC(suc){
@@ -210,8 +204,9 @@ func (this *ChordNode) firstSuccessorWithCheck() string{
 	return ""
 }
 
+
 func (this *ChordNode) quit(){
-	suc := this.firstSuccessorWithCheck()
+	suc := this.firstValidSuccessor()
 	this.dataLock.Lock()
 	mergeIntoRPC(suc,this.data)
 	this.dataLock.Unlock()
