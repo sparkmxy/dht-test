@@ -69,7 +69,7 @@ func between(start,elt,end string,inclusive bool) bool{
 
 func reportError(msg string){
 	if err:=recover(); err!=nil{
-		fmt.Println("An error occurred: ",err)
+		fmt.Println("Oops! ",err)
 	}else{
 		if msg == ""{
 			msg = "No error."

@@ -2,16 +2,16 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
 )
 
 func advancedTest() {
-	testWhenStabAndQuit(4)
-	testWhenStabAndQuit(2)
-
-	testRandom(2)
+	//testWhenStabAndQuit(4)
+	//testWhenStabAndQuit(2)
+	//testRandom(4)
 }
 
 func testForceQuit(rate time.Duration) {
@@ -32,7 +32,7 @@ func testForceQuit(rate time.Duration) {
 	}()
 
 	nodeGroup = new([maxNode]dhtNode)
-	datalocal = make(map[string]string)
+	datalocal = make(map[string]string)map[string]string
 	maxNodeSize = 110
 	maxDataSize = 1200
 
@@ -56,7 +56,7 @@ func testForceQuit(rate time.Duration) {
 		nodeGroup[j].Join(addr)
 		time.Sleep(time.Millisecond * 500)
 	}
-	time.Sleep(time.Second * rate * 10)
+	time.Sleep(time.Second * rate * 5)
 
 	for j := 0; j < maxDataSize; j++ {
 		k := randString(50)
@@ -173,7 +173,7 @@ func testWhenStabAndQuit(rate time.Duration) {
 	}
 	info[1].initInfo("put", failcnt, cnt)
 	info[1].finish()
-
+	/*
 	failcnt = 0
 	cnt = 0
 	for k, v := range datalocal {
@@ -188,6 +188,7 @@ func testWhenStabAndQuit(rate time.Duration) {
 	info[2].initInfo("get", failcnt, cnt)
 	info[2].finish()
 
+	 */
 	failcnt = 0
 	cnt = 0
 	for i := 0; i < maxNodeSize; i++ {
@@ -234,7 +235,7 @@ func testRandom(rate time.Duration) {
 	keyArray = new([maxData]string)
 	datalocal = make(map[string]string)
 	datamux := sync.Mutex{}
-	maxNodeSize = 300
+	maxNodeSize = 200
 
 	localIP = getIP()
 
@@ -265,10 +266,11 @@ func testRandom(rate time.Duration) {
 			time.Sleep(time.Millisecond * 100 * rate)
 			nodecnt++
 		}
+		log.Println("Join end with nodecnt = ",nodecnt)
+
 	}()
 
 	//time.Sleep(time.Second * rate * 10)
-
 	// fmt.Println("Force some node to quit")
 	// for i := 150; i < maxNodeSize; i++ {
 	// 	nodeGroup[i].ForceQuit()
@@ -280,7 +282,7 @@ func testRandom(rate time.Duration) {
 	quitcnt := 1
 	cnt2 := 0
 	datacnt := 0
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	go func() {
 		fmt.Println("start put")
 		for running {
@@ -292,25 +294,29 @@ func testRandom(rate time.Duration) {
 			datalocal[k] = v
 			datamux.Unlock()
 			cnt2++
-			if !nodeGroup[quitcnt+rand.Intn(nodecnt-quitcnt)].Put(k, v) {
+			if running && !nodeGroup[quitcnt+rand.Intn(nodecnt-quitcnt)].Put(k, v) {
 				failcnt2++
 			}
 			datacnt++
 			time.Sleep(time.Millisecond * rate)
 		}
+		log.Println("Put end.")
 	}()
 
 	failcnt3 := 0
 	cnt3 := 0
 	go func() {
 		fmt.Println("start get")
-		for {
+		for running {
 			datamux.Lock()
 			for k, v := range datalocal {
+				if !running {
+					break
+				}
 				tmp := quitcnt + rand.Intn(nodecnt-quitcnt)
 				ok, ret := nodeGroup[tmp].Get(k)
 				if !ok || ret != v {
-					// fmt.Println("get fail:", k, " => ", v, " from ", tmp)
+					//fmt.Println("get fail:", k, " => ", v, " from ", tmp)
 					failcnt3++
 				}
 				cnt3++
@@ -319,35 +325,45 @@ func testRandom(rate time.Duration) {
 			datamux.Unlock()
 			time.Sleep(1 * time.Second)
 		}
+		log.Println("Get end.")
 	}()
 
 	failcnt4 := 0
 	cnt4 := 0
-	time.Sleep(10 * time.Second)
-
+	time.Sleep(5 * time.Second)
+	done := make(chan bool)
 	go func() {
 		fmt.Println("start quit")
-		for {
+		for running {
 			if quitcnt < nodecnt-1 {
 				for j := 1; j <= 10; j++ {
 					rk := keyArray[rand.Intn(datacnt)]
-					ok, ret := nodeGroup[quitcnt+rand.Intn(nodecnt-quitcnt)].Get(rk)
-
+					tmp := quitcnt + rand.Intn(nodecnt-quitcnt)
+					ok, ret := nodeGroup[tmp].Get(rk)
 					cnt4++
 					if !ok || ret != datalocal[rk] {
+						//fmt.Println("get fail:", rk, " => ", datalocal[rk], " from ", tmp)
 						failcnt4++
 					}
 					time.Sleep(time.Millisecond * rate * 10)
 				}
 
 				nodeGroup[quitcnt].Quit()
+				log.Println("quitcnt = ",quitcnt)
 				quitcnt++
+			} else if nodecnt == maxNodeSize {
+				done <- true
 			}
 			time.Sleep(time.Millisecond * 100 * rate)
 		}
+		log.Println("Quit End.")
 	}()
-	time.Sleep(5 * time.Minute)
+	<-done
 	running = false
+	time.Sleep(2 * time.Second)
+	nodeGroup[0].Quit()
+	nodeGroup[maxNodeSize-1].Quit()
+
 	info[0].initInfo("join", failcnt1, cnt1)
 	info[0].finish()
 	info[1].initInfo("put", failcnt2, cnt2)
@@ -357,7 +373,4 @@ func testRandom(rate time.Duration) {
 	info[3].initInfo("get while quit", failcnt4, cnt4)
 	info[3].finish()
 
-	for i := 0; i < maxNodeSize; i++ {
-		nodeGroup[i].Quit()
-	}
 }

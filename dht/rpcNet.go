@@ -3,6 +3,7 @@ package dht
 import (
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"net"
 	"net/rpc"
@@ -42,7 +43,8 @@ func (s *Server)Launch() error{
 
 func (s *Server) shutdown(){
 	if err:=s.listener.Close(); err != nil{
-		panic(err)
+		log.Println(err)
+		//panic(err)
 	}
 	s.node.listening = false;
 	fmt.Println(s.node.address,":shutdown ok.")
@@ -51,7 +53,8 @@ func (s *Server) shutdown(){
 /*RPC-Callings*/
 func Call(address string,method string,request interface{}, reply interface{}) error{
 	if address == ""{
-		panic(method + ": Address is empty.")
+		log.Println(method + ": Address is empty.")
+		return errors.New("Calling to an empty address.")
 	}
 	//time.Sleep(time.Duration(rand.Int()%100+10))
 	client,err := rpc.Dial("tcp",address)
@@ -87,8 +90,8 @@ func checkValidRPC(address string) bool{
 				if ok{
 					return true
 				}
-			case <-time.After( 777 * time.Millisecond):
-				fmt.Println("Ping ",address, " time out")
+			case <-time.After(200 * time.Millisecond):
+				//fmt.Println("Ping ",address, " time out")
 		}
 	}
 	return false
@@ -133,20 +136,79 @@ func (this *ChordNode)FindSuccessor(nodeAddress string,hashAddr *big.Int) (strin
 
 func findSuccessorRPC(nodeAddress string,hashAddr *big.Int) (string,error){
 	reply := ""
-	if err:= Call(nodeAddress,"ChordNode.FindSuccessorHelper",hashAddr,&reply);err!=nil{
+	/*
+	if err := Call(nodeAddress, "ChordNode.FindSuccessorHelper", hashAddr, &reply); err != nil {
 		return "",err
 	}
+
+	 */
+
+	var err error = nil
+	ch := make(chan bool)
+	for T:=0;T<2;T++ {
+		go func() {
+			reply = ""
+			if err = Call(nodeAddress, "ChordNode.FindSuccessorHelper", hashAddr, &reply); err != nil {
+				ch <- false
+			}else{
+				ch <- true
+			}
+		}()
+		select {
+			case ok := <- ch:
+				if ok {
+					return reply,nil
+				}
+			case <- time.After(500*time.Millisecond):
+		}
+	}
+
 	return reply,nil
 }
 
+var TimeoutError error = errors.New("TIme out")
+
 func (this *ChordNode)Find(address string,key string)string{
-	suc,err := this.FindSuccessor(address,hashString(key))
+	ch := make(chan bool)
+	suc := "";
+	var err error = nil
+	for T:=0;T<2;T++{
+		go func() {
+			suc,err = this.FindSuccessor(address,hashString(key))
+			if err != nil{
+				ch <- false
+			}else{
+				ch <- true
+			}
+		}()
+		select {
+		case ok := <- ch:
+			if ok{
+				break
+			}
+
+		case <-time.After(500*time.Millisecond):
+			err = TimeoutError
+		}
+	}
 	if err != nil{
 		fmt.Println("findRPC：An error occur when finding successor.")
 		return ""
 	}
 	value := ""
-	err = Call(suc,"ChordNode.GetValue",key,&value)
+	done := make(chan bool)
+	go func() {
+		err = Call(suc,"ChordNode.GetValue",key,&value)
+		done <- true
+
+	}()
+	select {
+	case <- done:
+		return value
+	case <-time.After(200 *time.Millisecond):
+		return ""
+	}
+
 	return value
 }
 
@@ -157,7 +219,9 @@ func (this *ChordNode) PutOnRing(address string,key string,value string) bool {
 	}
 	reply := false;
 	err = Call(suc,"ChordNode.Put",[2]string{key,value},&reply)
-	fmt.Printf("put <%s,%s> at %s\n",key ,value,suc)
+	if reply{
+		fmt.Printf("put <%s,%s> at %s\n",key ,value,suc)
+	}
 	return reply
 }
 

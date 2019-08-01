@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-const successorListLen int = 8
+const successorListLen int = 20
 const fingerN = 160;
 var LocalIP string
 type ChordNode struct {
@@ -167,7 +167,9 @@ func (this *ChordNode)join(address string)error{
 		// successor[0] must be valid now
 		this.backupAddr = suc
 		this.sucLock.Unlock()
+		this.dataLock.Lock()
 		this.data = divideRPC(suc, this.address)
+		this.dataLock.Unlock()
 		backupNotifyRPC(this.address,suc,this.data)
 	}
 	fmt.Println("Join: successor = ",suc)
@@ -193,8 +195,9 @@ func (this *ChordNode)closestPrecedingNode(hashAddr *big.Int) string{
 
 func (this *ChordNode) firstValidSuccessor() string{
 	this.sucLock.RLock()
-	defer this.sucLock.RUnlock()
-	for _,suc := range this.successor{
+	successors := this.successor
+	this.sucLock.RUnlock()
+	for _,suc := range successors{
 		//fmt.Println("check: ",suc)
 		if checkValidRPC(suc){
 			return suc
@@ -236,6 +239,11 @@ func (this *ChordNode) GetData(request int, reply *map[string]string)error{
 	return nil
 }
 
+
+type ReceiveT struct {
+	data map[string]string
+	address string
+}
 func (this *ChordNode)ReceiveData(dataset map[string]string, reply *int) error{
 	this.dataLock.Lock()
 	for key,value := range dataset{
@@ -245,6 +253,16 @@ func (this *ChordNode)ReceiveData(dataset map[string]string, reply *int) error{
 		this.data[key] = value
 	}
 	this.dataLock.Unlock()
+	temp := 0
+	_ = Call(this.backupAddr,"ChordNode.ReceiveBackups",ReceiveT{dataset,this.address},temp)
+	return nil
+}
+
+func (this *ChordNode)ReceiveBackups(request ReceiveT,reply *int) error{
+	this.backupLock.Lock()
+	for key,value := range request.data{
+		this.backup[request.address][key] = value
+	}
 	return nil
 }
 
@@ -363,12 +381,14 @@ func (this *ChordNode) Dump(request int,reply *int)error{
 
 /*Functions for backup*/
 func (this *ChordNode) BackupNotify(para ParaType,reply *bool) error{
+	this.backupLock.Lock()
 	this.backup[para.Address] = para.Data
+	this.backupLock.Unlock()
 	return nil
 }
 
 func (this *ChordNode) PutBackup(pair [3]string, reply *bool) error{
-	fmt.Println(this.address,": PutBackup: from ",pair[0])
+	// fmt.Println(this.address,": PutBackup: from ",pair[0])
 	this.backupLock.Lock()
 	if this.backup[pair[0]] == nil{
 		this.backup[pair[0]] = make(map[string]string)
@@ -390,9 +410,9 @@ func (this *ChordNode)checkBackup(){
 		return;
 	}
 	newBackup := this.firstValidSuccessor()
-	this.dataLock.Lock()
+	//this.dataLock.RLock()
 	backupNotifyRPC(this.address,newBackup,this.data)
-	this.dataLock.Unlock()
+	//this.dataLock.RUnlock()
 	this.backupAddr = newBackup
 }
 
@@ -402,19 +422,25 @@ func (this *ChordNode)checkResposibleNodes(){
 			continue
 		}
 		if checkValidRPC(address) == false{
+			this.backupLock.Lock()
 			fmt.Println(this.address,"Try to revert node ",address)
 			this.putPairs(address,this.backup[address])
 			delete(this.backup,address)
+			this.backupLock.Unlock()
 		}else {
 			if getBackupAddressRPC(address) != this.address{
+				this.backupLock.Lock()
 				delete(this.backup,address)
+				this.backupLock.Unlock()
 			}
 		}
 	}
 }
 
 func (this *ChordNode) Untie(address string,reply *bool) error{
+	this.backupLock.Lock()
 	delete(this.backup,address)
+	this.backupLock.Unlock()
 	return nil
 }
 

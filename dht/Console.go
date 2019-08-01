@@ -2,14 +2,13 @@ package dht
 
 import (
 	"fmt"
-	"sync"
+	"log"
 	"time"
 )
 
 type Console struct {
 	node *ChordNode
 	Server *Server
-	wait *sync.WaitGroup
 }
 
 func (this *Console) SetPort(port int){
@@ -24,11 +23,15 @@ func (this *Console)Get(key string) (bool,string){
 		fmt.Println("Offline.")
 		return false,""
 	}
-	value := this.node.Find(this.node.address,key)
-	if value == ""{
-		return false,""
+	for T :=0;T < 3 ;T++{
+		value := this.node.Find(this.node.address,key)
+		if value != ""{
+			fmt.Printf("get : <%s,%s>\n",key,value)
+			return true,value
+		}
 	}
-	return true,value
+	log.Println("Not found.")
+	return false,""
 }
 
 func (this *Console)Put(key,value string) bool{
@@ -36,7 +39,12 @@ func (this *Console)Put(key,value string) bool{
 		fmt.Println("Offline.")
 		return false
 	}
-	return this.node.PutOnRing(this.node.address,key,value)
+	for T:=0;T < 3 ;T++ {
+		if this.node.PutOnRing(this.node.address,key,value) {
+			return true
+		}
+	}
+	return false
 }
 
 func (this *Console)Del(key string) bool{
@@ -64,17 +72,16 @@ func (this *Console)Create(){
 }
 
 func (this *Console)Join(address string) bool{
-	defer reportError("Join done.")
+	//defer reportError("Join done.")
 	err := this.node.join(address)
 	return err == nil
 }
 
 func (this *Console)Quit(){
-	defer  reportError("Quit successfully.")
+	//defer  reportError("Quit successfully.")
 	quitNotifyRPC(this.node.address,this.node.backupAddr)
 	this.Server.shutdown()
 	this.node.quit()
-	this.wait.Done()
 }
 
 func (this *Console)Ping(address string) bool{
@@ -85,7 +92,7 @@ func ignoreError(){
 	_ = recover()
 }
 /*Periodical routines*/
-const intervalTime time.Duration = 200*time.Millisecond
+const intervalTime time.Duration = 300 * time.Millisecond
 
 func (this *Console)stabilizeRoutine(){
 	defer ignoreError()
