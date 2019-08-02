@@ -11,9 +11,10 @@ import (
 	"math/big"
 	"strconv"
 	"sync"
+	"time"
 )
 
-const successorListLen int = 20
+const successorListLen int = 100
 const fingerN = 160;
 var LocalIP string
 type ChordNode struct {
@@ -97,17 +98,6 @@ func (this *ChordNode)stabilize(){
 
 
 func (this *ChordNode)fixFingers(){
-	//	defer reportError("fixFingers")
-	/*
-		this.next++
-		if this.next > fingerN{
-			this.next = 1
-		}
-		temp := ""
-		if err := this.FindSuccessor(jump(this.address,this.next),&temp); err == nil && temp!= ""{
-			this.finger[this.next] = temp;
-		}
-	*/
 	cnt := 1
 	this.next++
 	suc := this.firstValidSuccessor()
@@ -122,7 +112,8 @@ func (this *ChordNode)fixFingers(){
 		}
 		err := this.FindSuccessorHelper(jump(this.address, this.next), &temp)
 		if err != nil || temp == "" {
-			fmt.Println(this.address, ": ", err)
+			//fmt.Println(this.address, ": ", err)
+			this.next--
 			return
 		}
 		this.finger[this.next] = temp
@@ -190,7 +181,7 @@ func (this *ChordNode)closestPrecedingNode(hashAddr *big.Int) string{
 			}
 		}
 	}
-	return this.address
+	return this.firstValidSuccessor()
 }
 
 func (this *ChordNode) firstValidSuccessor() string{
@@ -350,14 +341,14 @@ func (this *ChordNode) Delete(key string,reply *string) error{
 }
 
 func (this *ChordNode) Divide(address string,reply *map[string]string)error{
-	this.dataLock.Lock()
+	this.dataLock.RLock()
 	for key,value := range this.data{
 		if between(address,key,this.address,true) == false{
 			delete(this.data,key)
 			(*reply)[key] = value
 		}
 	}
-	this.dataLock.Unlock()
+	this.dataLock.RUnlock()
 	return nil
 }
 
@@ -410,9 +401,9 @@ func (this *ChordNode)checkBackup(){
 		return;
 	}
 	newBackup := this.firstValidSuccessor()
-	//this.dataLock.RLock()
+	this.dataLock.RLock()
 	backupNotifyRPC(this.address,newBackup,this.data)
-	//this.dataLock.RUnlock()
+	this.dataLock.RUnlock()
 	this.backupAddr = newBackup
 }
 
@@ -425,6 +416,10 @@ func (this *ChordNode)checkResposibleNodes(){
 			this.backupLock.Lock()
 			fmt.Println(this.address,"Try to revert node ",address)
 			this.putPairs(address,this.backup[address])
+			go func() {
+				time.Sleep(500*time.Millisecond)
+				this.putPairs(address,this.backup[address])
+			}()
 			delete(this.backup,address)
 			this.backupLock.Unlock()
 		}else {
@@ -453,6 +448,7 @@ func (this *ChordNode) putPairs(address string,data map[string]string){
 	reply := 0;
 	_ = Call(suc,"ChordNode.ReceiveData",data,&reply)
 	fmt.Println(reply," of ",len(data)," items are received at ",suc,".")
+
 }
 
 func (this *ChordNode) GetBackupAddress(request int, reply *string) error{

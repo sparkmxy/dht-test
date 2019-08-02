@@ -39,12 +39,12 @@ func (this *Console)Put(key,value string) bool{
 		fmt.Println("Offline.")
 		return false
 	}
-	for T:=0;T < 3 ;T++ {
-		if this.node.PutOnRing(this.node.address,key,value) {
-			return true
-		}
-	}
-	return false
+	this.node.PutOnRing(this.node.address,key,value)
+	go func() {
+		time.Sleep(500*time.Millisecond)
+		this.node.PutOnRing(this.node.address,key,value)
+	}()
+	return true
 }
 
 func (this *Console)Del(key string) bool{
@@ -92,7 +92,7 @@ func ignoreError(){
 	_ = recover()
 }
 /*Periodical routines*/
-const intervalTime time.Duration = 300 * time.Millisecond
+const intervalTime time.Duration = 150 * time.Millisecond
 
 func (this *Console)stabilizeRoutine(){
 	defer ignoreError()

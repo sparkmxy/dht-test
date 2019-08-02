@@ -159,7 +159,7 @@ func findSuccessorRPC(nodeAddress string,hashAddr *big.Int) (string,error){
 				if ok {
 					return reply,nil
 				}
-			case <- time.After(500*time.Millisecond):
+			case <- time.After(1 * time.Second):
 		}
 	}
 
@@ -192,7 +192,7 @@ func (this *ChordNode)Find(address string,key string)string{
 		}
 	}
 	if err != nil{
-		fmt.Println("findRPC：An error occur when finding successor.")
+		//fmt.Println("findRPC：An error occur when finding successor.")
 		return ""
 	}
 	value := ""
@@ -200,7 +200,6 @@ func (this *ChordNode)Find(address string,key string)string{
 	go func() {
 		err = Call(suc,"ChordNode.GetValue",key,&value)
 		done <- true
-
 	}()
 	select {
 	case <- done:
@@ -208,14 +207,13 @@ func (this *ChordNode)Find(address string,key string)string{
 	case <-time.After(200 *time.Millisecond):
 		return ""
 	}
-
-	return value
 }
 
 func (this *ChordNode) PutOnRing(address string,key string,value string) bool {
 	suc,err := this.FindSuccessor(address,hashString(key))
 	if err != nil{
-		fmt.Println("putRPC：An error occur when finding successor: ",err)
+		//fmt.Println("putRPC：An error occur when finding successor: ",err)
+		return false
 	}
 	reply := false;
 	err = Call(suc,"ChordNode.Put",[2]string{key,value},&reply)
