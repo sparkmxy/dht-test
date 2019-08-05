@@ -1,7 +1,6 @@
 package main
 
 import (
-	_ "net/http/pprof"
 	"flag"
 	"fmt"
 	"net/http"
@@ -66,11 +65,6 @@ func failrate() float64 {
 }
 
 func main() {
-	go func() {
-		http.ListenAndServe("localhost:6060",nil)
-	}()
-
-
 	green.Println("Start Testing")
 	finalScore = 0
 
