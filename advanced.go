@@ -8,10 +8,10 @@ import (
 )
 
 func advancedTest() {
-	//testWhenStabAndQuit(4)
-	//testWhenStabAndQuit(2)
+	testWhenStabAndQuit(4)
+	testWhenStabAndQuit(2)
 
-	//testRandom(2)
+	testRandom(2)
 }
 
 func testForceQuit(rate time.Duration) {

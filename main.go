@@ -30,7 +30,7 @@ func init() {
 	flag.BoolVar(&help, "h", false, "give help")
 	flag.BoolVar(&version, "v", false, "version")
 	flag.BoolVar(&nointerrupt, "n", false, "can not use ctrl-c to interrupt program")
-	flag.IntVar(&level, "l", 1, "levels of tests(0 for all, 1 for advanced)")
+	flag.IntVar(&level, "l", 0, "levels of tests(0 for all, 1 for advanced)")
 
 	flag.Usage = usage
 	flag.Parse()
