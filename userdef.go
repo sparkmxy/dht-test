@@ -1,6 +1,6 @@
 package main
 
-import "dht"
+import "test/dht"
 
 func NewNode(port int) dhtNode{
 	console := dht.Console{}
