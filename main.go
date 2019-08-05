@@ -1,8 +1,10 @@
 package main
 
 import (
+	_ "net/http/pprof"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 )
@@ -64,6 +66,11 @@ func failrate() float64 {
 }
 
 func main() {
+	go func() {
+		http.ListenAndServe("localhost:6060",nil)
+	}()
+
+
 	green.Println("Start Testing")
 	finalScore = 0
 
@@ -85,7 +92,6 @@ func main() {
 		totalFail = 0
 		fallthrough
 	case 1:
-		/*
 		blue.Println("Start Advanced Tests")
 		if advancedTest(); maxFail > failrate() {
 			green.Println("Passed Advanced Tests with", failrate())
@@ -93,8 +99,6 @@ func main() {
 			red.Println("Failed Advanced Tests")
 			// os.Exit(0)
 		}
-
-		 */
 
 		totalCnt = 0
 		totalFail = 0

@@ -29,28 +29,36 @@ func (s *Server)Launch() error{
 
 	lsn,err := net.Listen("tcp",s.node.address)
 	if err!=nil{
-		fmt.Println("Listen failed.")
-		return err
+		// try again
+		lsn,err = net.Listen("tcp",s.node.address)
+		if err != nil {
+			return err
+			fmt.Println("Listen failed.")
+		}
 	}
 	s.listener = lsn
 	s.node.create()
 	s.node.listening = true
 
 	go s.server.Accept(s.listener)
-
 	return nil
 }
 
 func (s *Server) shutdown(){
-	if err:=s.listener.Close(); err != nil{
-		log.Println(err)
-		//panic(err)
-	}
 	s.node.listening = false;
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		if err:=s.listener.Close(); err != nil{
+			log.Println(err)
+			//panic(err)
+		}
+	}()
 	fmt.Println(s.node.address,":shutdown ok.")
 }
 
+
 /*RPC-Callings*/
+/*
 func Call(address string,method string,request interface{}, reply interface{}) error{
 	if address == ""{
 		log.Println(method + ": Address is empty.")
@@ -58,43 +66,106 @@ func Call(address string,method string,request interface{}, reply interface{}) e
 	}
 	//time.Sleep(time.Duration(rand.Int()%100+10))
 	client,err := rpc.Dial("tcp",address)
-
+	done := make(chan struct{})
+	defer func() {
+		if client != nil{
+			client.Close()
+		}
+	}()
 	if err != nil{
 		return err
 	}
-	err = client.Call(method,request,reply)
-	client.Close()
+
+	go func() {
+		err = client.Call(method,request,reply)
+		done <- struct{}{}
+	}()
+	select {
+	case <- done:
+	case <- time.After(3 * time.Second):
+		err = TimeoutError
+	}
 	if err != nil{
 		return err;
 	}
 	return nil;
 }
 
+ */
+
+var emptyAddressError error = errors.New("Calling to an empty address")
+
+func getClinet(address string) *rpc.Client{
+	if address == ""{
+		log.Println("Address is empty.")
+		return nil
+	}
+	//time.Sleep(time.Duration(rand.Int()%100+10))
+	conn, err := net.DialTimeout("tcp",address,1 * time.Second)
+	if err != nil{
+		return nil
+	}
+	err = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err != nil{
+		_  = conn.Close()
+		return nil
+	}
+	return rpc.NewClient(conn)
+}
+
+func CallFunc(client *rpc.Client,method string, request interface{},reply interface{}) error{
+	var err error
+	select {
+	case call := <- client.Go(method,request,reply,make(chan *rpc.Call,1)).Done:
+		err = call.Error
+	case <- time.After(1*time.Second):
+		err = TimeoutError
+	}
+	return err
+}
+
+func Call(address string,method string,request interface{}, reply interface{}) error{
+	if address == ""{
+		log.Println(method + ": Address is empty.")
+		return emptyAddressError
+	}
+	//time.Sleep(time.Duration(rand.Int()%100+10))
+	conn, err := net.DialTimeout("tcp",address,1 * time.Second)
+	if err != nil{
+		return err
+	}
+
+	err = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if err != nil{
+		_  = conn.Close()
+		return err
+	}
+	client := rpc.NewClient(conn)
+	defer client.Close()
+	select {
+		case call := <- client.Go(method,request,reply,make(chan *rpc.Call,1)).Done:
+			err = call.Error
+		case <- time.After(1*time.Second):
+			err = TimeoutError
+	}
+	if err != nil{
+		return err
+	}
+	return nil
+}
+
 func checkValidRPC(address string) bool{
 	if address == ""{
 		return false
 	}
-	ch := make(chan bool)
-	for T:=0;T<2;T++{
-		go func() {
-			reply := 0
-			err := Call(address,"ChordNode.Ping",1,&reply)
-			if err == nil && reply == 1 {
-				ch <- true
-			}else{
-				ch <- false
-			}
-		}()
-		select {
-			case ok := <- ch :
-				if ok{
-					return true
-				}
-			case <-time.After(200 * time.Millisecond):
-				//fmt.Println("Ping ",address, " time out")
-		}
+
+	reply := 0
+	err := Call(address,"ChordNode.Ping",1,&reply)
+
+	if err != nil || reply != 1{
+		err = Call(address,"ChordNode.Ping",1,&reply)
 	}
-	return false
+	return err == nil && reply == 1
 }
 
 func predecessorRPC(address string)(string,error){
@@ -134,84 +205,39 @@ func (this *ChordNode)FindSuccessor(nodeAddress string,hashAddr *big.Int) (strin
 	return reply,nil
 }
 
-func findSuccessorRPC(nodeAddress string,hashAddr *big.Int) (string,error){
+func findSuccessorRPC(nodeAddress string,hashAddr *big.Int)(string,error){
 	reply := ""
-	/*
+
 	if err := Call(nodeAddress, "ChordNode.FindSuccessorHelper", hashAddr, &reply); err != nil {
 		return "",err
-	}
-
-	 */
-
-	var err error = nil
-	ch := make(chan bool)
-	for T:=0;T<2;T++ {
-		go func() {
-			reply = ""
-			if err = Call(nodeAddress, "ChordNode.FindSuccessorHelper", hashAddr, &reply); err != nil {
-				ch <- false
-			}else{
-				ch <- true
-			}
-		}()
-		select {
-			case ok := <- ch:
-				if ok {
-					return reply,nil
-				}
-			case <- time.After(1 * time.Second):
-		}
 	}
 
 	return reply,nil
 }
 
+
 var TimeoutError error = errors.New("TIme out")
 
 func (this *ChordNode)Find(address string,key string)string{
-	ch := make(chan bool)
 	suc := "";
 	var err error = nil
-	for T:=0;T<2;T++{
-		go func() {
-			suc,err = this.FindSuccessor(address,hashString(key))
-			if err != nil{
-				ch <- false
-			}else{
-				ch <- true
-			}
-		}()
-		select {
-		case ok := <- ch:
-			if ok{
-				break
-			}
+	suc,err = this.FindSuccessor(address,hashString(key))
 
-		case <-time.After(500*time.Millisecond):
-			err = TimeoutError
-		}
-	}
 	if err != nil{
 		//fmt.Println("findRPC：An error occur when finding successor.")
 		return ""
 	}
 	value := ""
-	done := make(chan bool)
-	go func() {
-		err = Call(suc,"ChordNode.GetValue",key,&value)
-		done <- true
-	}()
-	select {
-	case <- done:
+	err = Call(suc,"ChordNode.GetValue",key,&value)
+	if err == nil{
 		return value
-	case <-time.After(200 *time.Millisecond):
-		return ""
 	}
+	return ""
 }
 
 func (this *ChordNode) PutOnRing(address string,key string,value string) bool {
 	suc,err := this.FindSuccessor(address,hashString(key))
-	if err != nil{
+	if err != nil {
 		//fmt.Println("putRPC：An error occur when finding successor: ",err)
 		return false
 	}

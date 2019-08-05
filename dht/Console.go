@@ -23,7 +23,7 @@ func (this *Console)Get(key string) (bool,string){
 		fmt.Println("Offline.")
 		return false,""
 	}
-	for T :=0;T < 3 ;T++{
+	for T :=0;T < 8 ;T++{
 		value := this.node.Find(this.node.address,key)
 		if value != ""{
 			fmt.Printf("get : <%s,%s>\n",key,value)
@@ -62,9 +62,9 @@ func (this *Console)Run(){
 	this.Server = NewServer(this.node)
 	this.Server.Launch()
 	go this.stabilizeRoutine()
-	go this.checkPredecessorRoutine()
 	go this.fixFingersRoutine()
 	go this.checkPredecessorRoutine()
+	go this.backupRoutine()
 	go this.checkTiedNodesRoutine()
 }
 
@@ -73,8 +73,16 @@ func (this *Console)Create(){
 
 func (this *Console)Join(address string) bool{
 	//defer reportError("Join done.")
+	time.Sleep(200 * time.Millisecond)
 	err := this.node.join(address)
-	return err == nil
+	if err!=nil {
+		log.Println(err)
+		err = this.node.join(address)
+	}
+	if err != nil{
+		panic(err)
+	}
+	return true
 }
 
 func (this *Console)Quit(){
@@ -82,6 +90,7 @@ func (this *Console)Quit(){
 	quitNotifyRPC(this.node.address,this.node.backupAddr)
 	this.Server.shutdown()
 	this.node.quit()
+	time.Sleep(time.Millisecond * 200)
 }
 
 func (this *Console)Ping(address string) bool{
@@ -96,73 +105,60 @@ const intervalTime time.Duration = 150 * time.Millisecond
 
 func (this *Console)stabilizeRoutine(){
 	defer ignoreError()
-	ticker := time.Tick(intervalTime)
 	for{
 		if this.Listening() == false{
 			return
 		}
-		select {
-			case <-ticker:
-				this.node.stabilize()
-		}
+		this.node.stabilize()
+		time.Sleep(intervalTime)
 	}
 }
 
 func (this *Console)checkPredecessorRoutine(){
 	defer ignoreError()
-	ticker := time.Tick(intervalTime)
 	for{
 		if this.Listening() == false{
 			return
 		}
-		select {
-			case <-ticker:
-				this.node.checkPredecessor()
-		}
+		this.node.checkPredecessor()
+		time.Sleep(intervalTime)
 	}
 }
 
 func (this *Console)fixFingersRoutine(){
 	defer ignoreError()
-	ticker := time.Tick(intervalTime)
 	for{
 		if this.Listening() == false{
 			return
 		}
-		select {
-		case <-ticker:
-			this.node.fixFingers()
-		}
+		this.node.fixFingers()
+		time.Sleep(intervalTime)
 	}
 }
 
 func (this *Console)backupRoutine(){
 	defer ignoreError()
-	ticker := time.Tick(intervalTime)
 	for{
 		if this.Listening() == false{
 			return
 		}
-		select {
-		case <-ticker:
-			this.node.checkBackup()
-		}
+		this.node.checkBackup()
+		time.Sleep(intervalTime)
 	}
 }
 
+
 func (this *Console)checkTiedNodesRoutine(){
 	defer ignoreError()
-	ticker := time.Tick(intervalTime)
 	for{
 		if this.Listening() == false{
 			return
 		}
-		select {
-		case <-ticker:
-			this.node.checkResposibleNodes()
-		}
+		this.node.checkResposibleNodes()
+		time.Sleep(intervalTime)
 	}
 }
+
 
 /*Other functions*/
 
@@ -181,4 +177,5 @@ func (this *Console) DumpAll(){
 
 func (this *Console) ForceQuit(){
 	this.Server.shutdown()
+	time.Sleep(time.Millisecond * 300)
 }
